@@ -22,6 +22,7 @@ function ConfessionPage() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [openComments, setOpenComments] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"reacts" | "new">("reacts");
 
   // Bảng confessions không nằm trong publication realtime (xem migration), nên
   // bài mới duyệt về bằng cách hỏi lại định kỳ. Cảm xúc và bình luận thì có
@@ -90,18 +91,29 @@ function ConfessionPage() {
   }, [qc]);
 
   const byPost = useMemo(() => {
-    const r = new Map<string, { counts: Record<string, number>; mine: string | null }>();
+    const r = new Map<string, { counts: Record<string, number>; mine: string | null; total: number }>();
     for (const x of reactions ?? []) {
       let e = r.get(x.confession_id);
       if (!e) {
-        e = { counts: {}, mine: null };
+        e = { counts: {}, mine: null, total: 0 };
         r.set(x.confession_id, e);
       }
       e.counts[x.emoji] = (e.counts[x.emoji] ?? 0) + 1;
+      e.total += 1;
       if (x.user_id === user.id) e.mine = x.emoji;
     }
     return r;
   }, [reactions, user.id]);
+
+  const sortedPosts = useMemo(() => {
+    const list = [...(posts ?? [])];
+    if (sortBy === "new") return list.sort((a: any, b: any) => (b.number ?? 0) - (a.number ?? 0));
+    // Bằng điểm thì bài mới lên trước, để bài vừa duyệt không nằm mãi dưới đáy.
+    return list.sort((a: any, b: any) => {
+      const d = (byPost.get(b.id)?.total ?? 0) - (byPost.get(a.id)?.total ?? 0);
+      return d !== 0 ? d : (b.number ?? 0) - (a.number ?? 0);
+    });
+  }, [posts, byPost, sortBy]);
 
   const commentsByPost = useMemo(() => {
     const m = new Map<string, any[]>();
@@ -178,7 +190,28 @@ function ConfessionPage() {
           </div>
         </form>
 
-        <div className="mt-8 space-y-3">
+        {(posts?.length ?? 0) > 0 && (
+          <div className="mt-8 flex items-center gap-1.5">
+            {([
+              ["reacts", "Nhiều cảm xúc nhất"],
+              ["new", "Mới nhất"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSortBy(key)}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  sortBy === key
+                    ? "border-brand bg-brand/10 text-brand"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4 space-y-3">
           {isLoading && <p className="text-sm text-muted-foreground">Đang tải…</p>}
           {!isLoading && (posts?.length ?? 0) === 0 && (
             <div className="rounded-xl border border-dashed border-border p-8 text-center">
@@ -188,7 +221,7 @@ function ConfessionPage() {
             </div>
           )}
 
-          {posts?.map((p: any) => {
+          {sortedPosts.map((p: any) => {
             const r = byPost.get(p.id);
             const cs = commentsByPost.get(p.id) ?? [];
             const isOpen = openComments === p.id;
