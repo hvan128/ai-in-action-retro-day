@@ -182,7 +182,7 @@ function AdminPage() {
 
   const visiblePeople = useMemo(() => {
     const q = userQuery.trim().toLowerCase();
-    if (!q) return people.slice(0, 20);
+    if (!q) return people;
     return people.filter(
       (p: any) => p.name.toLowerCase().includes(q) || (p.email ?? "").toLowerCase().includes(q),
     );
@@ -425,6 +425,11 @@ function AdminPage() {
                   placeholder="Tìm theo tên hoặc email…"
                   className="w-full bg-transparent text-sm outline-none"
                 />
+                {userQuery && (
+                  <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+                    {visiblePeople.length}
+                  </span>
+                )}
               </div>
 
               <div className="mt-3 space-y-2">
@@ -498,10 +503,8 @@ function AdminPage() {
                     </div>
                   );
                 })}
-                {!userQuery && people.length > 20 && (
-                  <p className="text-xs text-muted-foreground">
-                    Đang hiện 20 người viết nhiều nhất. Gõ vào ô tìm kiếm để thấy những người còn lại.
-                  </p>
+                {userQuery && visiblePeople.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Không có ai khớp “{userQuery}”.</p>
                 )}
               </div>
             </section>
