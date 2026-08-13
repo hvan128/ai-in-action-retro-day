@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS public.board_ai_insights CASCADE;

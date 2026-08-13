@@ -1,0 +1,1 @@
+UPDATE public.rooms SET description = NULL WHERE id IN ('C401','E402','E403');

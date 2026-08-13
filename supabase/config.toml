@@ -1,0 +1,15 @@
+project_id = "ylwfbivqrkmztwjszznx"
+
+[auth]
+enabled = true
+site_url = "https://ai-in-action-retro-day.van-nh120802.workers.dev"
+additional_redirect_urls = [
+  "https://ai-in-action-retro-day.van-nh120802.workers.dev",
+  "http://localhost:8080",
+]
+
+[auth.email]
+enable_signup = true
+# Sự kiện 200 học viên đăng ký cùng lúc: bật xác nhận email là kẹt cứng vì
+# SMTP mặc định của Supabase chỉ gửi được vài mail mỗi giờ. Đăng ký xong vào thẳng.
+enable_confirmations = false

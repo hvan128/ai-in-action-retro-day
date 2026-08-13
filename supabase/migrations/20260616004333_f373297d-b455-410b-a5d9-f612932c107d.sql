@@ -1,0 +1,1 @@
+ALTER TABLE public.notes ADD COLUMN IF NOT EXISTS stickers text[] NOT NULL DEFAULT '{}'::text[];
