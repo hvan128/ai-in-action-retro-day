@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as JCodeRouteImport } from './routes/j.$code'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedRoomsIndexRouteImport } from './routes/_authenticated/rooms.index'
 import { Route as AuthenticatedRoomsRoomIdRouteImport } from './routes/_authenticated/rooms.$roomId'
@@ -30,6 +31,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JCodeRoute = JCodeRouteImport.update({
+  id: '/j/$code',
+  path: '/j/$code',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/j/$code': typeof JCodeRoute
   '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteWithChildren
   '/rooms/': typeof AuthenticatedRoomsIndexRoute
   '/board/$roomId/$teamId': typeof AuthenticatedBoardRoomIdTeamIdRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/j/$code': typeof JCodeRoute
   '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteWithChildren
   '/rooms': typeof AuthenticatedRoomsIndexRoute
   '/board/$roomId/$teamId': typeof AuthenticatedBoardRoomIdTeamIdRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/j/$code': typeof JCodeRoute
   '/_authenticated/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteWithChildren
   '/_authenticated/rooms/': typeof AuthenticatedRoomsIndexRoute
   '/_authenticated/board/$roomId/$teamId': typeof AuthenticatedBoardRoomIdTeamIdRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/admin'
+    | '/j/$code'
     | '/rooms/$roomId'
     | '/rooms/'
     | '/board/$roomId/$teamId'
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/admin'
+    | '/j/$code'
     | '/rooms/$roomId'
     | '/rooms'
     | '/board/$roomId/$teamId'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/admin'
+    | '/j/$code'
     | '/_authenticated/rooms/$roomId'
     | '/_authenticated/rooms/'
     | '/_authenticated/board/$roomId/$teamId'
@@ -125,6 +137,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  JCodeRoute: typeof JCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -148,6 +161,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/j/$code': {
+      id: '/j/$code'
+      path: '/j/$code'
+      fullPath: '/j/$code'
+      preLoaderRoute: typeof JCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -224,6 +244,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  JCodeRoute: JCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

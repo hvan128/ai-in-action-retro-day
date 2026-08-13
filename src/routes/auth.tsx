@@ -3,6 +3,7 @@ import { useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { takePendingJoin } from "@/lib/pending-join";
 
 const searchSchema = z.object({
   mode: z.enum(["signin", "signup"]).optional(),
@@ -46,7 +47,11 @@ function AuthPage() {
         if (error) throw error;
         toast.success("Chào mừng quay lại! 👋");
       }
-      navigate({ to: "/rooms" });
+      // Quét QR lúc chưa đăng nhập thì đưa thẳng về nhóm đã định, đừng thả về
+      // danh sách phòng bắt học viên tự mò lại.
+      const pending = takePendingJoin();
+      if (pending) navigate({ to: "/j/$code", params: { code: pending } });
+      else navigate({ to: "/rooms" });
     } catch (err: any) {
       toast.error(err.message ?? "Có gì đó không ổn rồi 😢");
     } finally {

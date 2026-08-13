@@ -32,6 +32,8 @@ const NOTE_COLORS = ["note-yellow", "note-green", "note-blue", "note-pink", "not
 // ─────────────────────────────────────────────────────────────────────────────
 
 const apply = process.argv.includes("--apply");
+const reset = process.argv.includes("--reset");
+const force = process.argv.includes("--force");
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -42,8 +44,25 @@ if (!url || !key) {
 
 const sb = createClient(url, key, { auth: { persistSession: false } });
 
+// teams.created_by là NOT NULL và trỏ tới auth.users. Nhóm tạo sẵn không thuộc
+// học viên nào nên gán cho tài khoản quản trị — trùng với ADMIN_EMAIL mà
+// src/lib/admin-data.functions.ts dùng để phân quyền.
+const OWNER_EMAIL = process.env.RETRO_OWNER_EMAIL || "admin@gmail.com";
+
+const { data: userPage, error: userErr } = await sb.auth.admin.listUsers({ perPage: 1000 });
+if (userErr) {
+  console.error("Không đọc được danh sách tài khoản:", userErr.message);
+  process.exit(1);
+}
+const owner = (userPage?.users ?? []).find((u) => u.email === OWNER_EMAIL);
+if (!owner) {
+  console.error(`\nChưa có tài khoản ${OWNER_EMAIL}.`);
+  console.error("Đăng ký tài khoản đó ở /auth trước, hoặc đặt RETRO_OWNER_EMAIL sang email khác đã tồn tại.");
+  process.exit(1);
+}
+
 // Chặn chạy nhầm hai lần: nếu phòng đã có team thì dừng, tránh tạo trùng.
-const { data: existing, error: exErr } = await sb.from("teams").select("code, name, room_id");
+const { data: existing, error: exErr } = await sb.from("teams").select("id, code, name, room_id");
 if (exErr) {
   console.error("Không đọc được bảng teams:", exErr.message);
   process.exit(1);
@@ -51,10 +70,37 @@ if (exErr) {
 
 const rooms = PLAN.map((p) => p.room);
 const clash = (existing ?? []).filter((t) => rooms.includes(t.room_id));
+if (clash.length > 0 && reset) {
+  // Xoá team cũ để tạo lại từ đầu. teams.room_id có ON DELETE CASCADE nên thao
+  // tác này kéo theo cả board, giấy nhớ và tim của những nhóm đó.
+  const ids = clash.map((t) => t.id);
+  const { data: boards } = await sb.from("boards").select("id, team_id").in("team_id", ids);
+  const boardIds = (boards ?? []).map((b) => b.id);
+  const { count: noteCount } = boardIds.length
+    ? await sb.from("notes").select("id", { count: "exact", head: true }).in("board_id", boardIds)
+    : { count: 0 };
+
+  if (noteCount > 0 && !force) {
+    console.error(`\nTỪ CHỐI XOÁ: ${clash.length} nhóm sắp xoá đang chứa ${noteCount} giấy nhớ.\n`);
+    console.error("Đây có thể là dữ liệu thật của học viên. Xoá là mất hẳn, không khôi phục được.");
+    console.error("Chắc chắn muốn xoá thì thêm --force.");
+    process.exit(1);
+  }
+
+  console.log(`Xoá ${clash.length} nhóm cũ${noteCount ? ` (kèm ${noteCount} giấy nhớ)` : " (chưa có giấy nhớ nào)"}…`);
+  if (apply) {
+    const { error } = await sb.from("teams").delete().in("id", ids);
+    if (error) { console.error("Xoá lỗi:", error.message); process.exit(1); }
+  } else {
+    console.log("  (chạy khô — chưa xoá thật)");
+  }
+  clash.length = 0;
+}
+
 if (clash.length > 0) {
   console.error(`\n${apply ? "DỪNG LẠI" : "CẢNH BÁO"}: ${clash.length} team đã tồn tại trong các phòng sắp tạo.\n`);
   for (const t of clash) console.error(`  #${t.code}  ${t.room_id}  ${t.name}`);
-  console.error("\nXoá chúng trong /admin trước, hoặc bỏ phòng đó khỏi PLAN rồi chạy lại.");
+  console.error("\nXoá bằng --reset, hoặc bỏ phòng đó khỏi PLAN rồi chạy lại.");
   // Chạy khô không ghi gì nên vẫn cho xem trước; chỉ chặn cứng khi ghi thật.
   if (apply) process.exit(1);
   console.error("");
@@ -64,7 +110,10 @@ const total = PLAN.reduce((s, p) => s + p.teams, 0);
 console.log(`\n${apply ? "GHI THẬT" : "CHẠY KHÔ (không ghi gì)"} — ${total} nhóm trong ${PLAN.length} phòng\n`);
 
 const rows = [];
-let seq = (existing ?? []).reduce((m, t) => Math.max(m, parseInt(t.code, 10) || 0), 0);
+// Trigger assign_team_code lấy MAX(code)+1 trên toàn bảng, nên sau khi --reset
+// xoá hết thì mã chạy lại từ 001.
+const remaining = reset ? (existing ?? []).filter((t) => !rooms.includes(t.room_id)) : (existing ?? []);
+let seq = remaining.reduce((m, t) => Math.max(m, parseInt(t.code, 10) || 0), 0);
 
 for (const { room, teams } of PLAN) {
   for (let i = 1; i <= teams; i++) {
@@ -80,7 +129,7 @@ for (const { room, teams } of PLAN) {
 
     const { data: team, error: e1 } = await sb
       .from("teams")
-      .insert({ room_id: room, name, color, code: "" })
+      .insert({ room_id: room, name, color, code: "", created_by: owner.id })
       .select("id, code")
       .single();
     if (e1) {
@@ -103,7 +152,8 @@ for (const { room, teams } of PLAN) {
 console.log("| Phòng | Nhóm | Mã | Link phát cho học viên |");
 console.log("| --- | --- | --- | --- |");
 for (const r of rows) {
-  console.log(`| ${r.room} | ${r.name} | #${r.code} | ${BASE_URL}/rooms/${r.room}/${r.code} |`);
+  // Link ngắn /j/{mã}: mã là duy nhất toàn hệ thống nên không cần room trong URL.
+  console.log(`| ${r.room} | ${r.name} | #${r.code} | ${BASE_URL}/j/${r.code} |`);
 }
 
 console.log(
