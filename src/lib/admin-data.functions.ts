@@ -52,6 +52,60 @@ export const getAdminData = createServerFn({ method: "GET" })
     };
   });
 
+// Email và trạng thái khoá nằm ở auth.users chứ không ở bảng profiles, nên
+// getAdminData không lấy được. Giấy nhớ thì đã có sẵn trong getAdminData rồi,
+// chỉ cần gom theo author_id ở phía client.
+export const adminListAccounts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const email = (context.claims as any)?.email;
+    if (email !== ADMIN_EMAIL) {
+      throw new Error("Forbidden");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const users: { id: string; email: string | null; banned: boolean }[] = [];
+    for (let page = 1; page <= 20; page++) {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
+      if (error) throw new Error(error.message);
+      for (const u of data?.users ?? []) {
+        users.push({
+          id: u.id,
+          email: u.email ?? null,
+          banned: Boolean(u.banned_until && new Date(u.banned_until) > new Date()),
+        });
+      }
+      if (!data?.users?.length || data.users.length < 200) break;
+    }
+    return users;
+  });
+
+export const adminSetUserBan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { user_id: string; banned: boolean }) => input)
+  .handler(async ({ data, context }) => {
+    const email = (context.claims as any)?.email;
+    if (email !== ADMIN_EMAIL) {
+      throw new Error("Forbidden");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Tự khoá chính mình là mất luôn đường vào trang admin, không mở lại được
+    // từ giao diện. Chặn ở server chứ không chỉ ẩn nút ngoài UI.
+    const { data: me } = await supabaseAdmin.auth.admin.listUsers({ perPage: 200 });
+    const target = (me?.users ?? []).find((u) => u.id === data.user_id);
+    if (target?.email === ADMIN_EMAIL) {
+      throw new Error("Không thể khoá chính tài khoản quản trị.");
+    }
+
+    // Supabase tính khoá theo thời hạn; mốc rất xa coi như vĩnh viễn.
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(data.user_id, {
+      ban_duration: data.banned ? "876000h" : "none",
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true, banned: data.banned };
+  });
+
 export const adminCreateUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { email: string; password: string; display_name?: string }) => input)

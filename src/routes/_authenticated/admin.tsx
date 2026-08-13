@@ -2,9 +2,16 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getAdminData, adminCreateUser, adminDeleteTeam, adminDeleteNote } from "@/lib/admin-data.functions";
+import {
+  getAdminData,
+  adminCreateUser,
+  adminDeleteTeam,
+  adminDeleteNote,
+  adminListAccounts,
+  adminSetUserBan,
+} from "@/lib/admin-data.functions";
 import { TEMPLATES, type TemplateKey } from "@/lib/utils";
-import { Download, Trash2 } from "lucide-react";
+import { Download, Trash2, Ban, Search, Undo2 } from "lucide-react";
 import { Linkify } from "@/lib/linkify";
 import {
   AlertDialog,
@@ -56,8 +63,14 @@ function AdminPage() {
   const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState<string | null>(null);
 
+  const listAccounts = useServerFn(adminListAccounts);
+  const setUserBan = useServerFn(adminSetUserBan);
+  const [userQuery, setUserQuery] = useState("");
+  const [openUserId, setOpenUserId] = useState<string | null>(null);
+  const [banningId, setBanningId] = useState<string | null>(null);
+
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmType, setConfirmType] = useState<"team" | "card" | null>(null);
+  const [confirmType, setConfirmType] = useState<"team" | "card" | "ban" | "unban" | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [confirmLabel, setConfirmLabel] = useState<string>("");
   const [confirmDetail, setConfirmDetail] = useState<string>("");
@@ -69,6 +82,12 @@ function AdminPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin-data"],
     queryFn: () => fetchAdmin(),
+    enabled: user.email === "admin@gmail.com",
+  });
+
+  const { data: accounts } = useQuery({
+    queryKey: ["admin-accounts"],
+    queryFn: () => listAccounts(),
     enabled: user.email === "admin@gmail.com",
   });
 
@@ -137,7 +156,39 @@ function AdminPage() {
     downloadCsv(`retro-${tag}-${new Date().toISOString().slice(0, 10)}.csv`, rows);
   }
 
-  function askDelete(type: "team" | "card", id: string, label: string, detail: string) {
+  // Gộp tài khoản (email, trạng thái khoá) với giấy nhớ đã có sẵn trong
+  // getAdminData. Xếp người viết nhiều lên trước — cần soi ai thì gần như luôn
+  // là người viết nhiều nhất.
+  const people = useMemo(() => {
+    if (!data) return [];
+    const nameOf = new Map<string, string>(data.profiles.map((p: any) => [p.id, p.display_name]));
+    const teamOfBoard = new Map<string, any>();
+    for (const b of data.boards) {
+      teamOfBoard.set(b.id, data.teams.find((t: any) => t.id === b.team_id));
+    }
+    const byAuthor = new Map<string, any[]>();
+    for (const n of data.notes) {
+      if (!byAuthor.has(n.author_id)) byAuthor.set(n.author_id, []);
+      byAuthor.get(n.author_id)!.push({ ...n, team: teamOfBoard.get(n.board_id) });
+    }
+    return (accounts ?? [])
+      .map((a: any) => ({
+        ...a,
+        name: nameOf.get(a.id) ?? "(chưa đặt tên)",
+        notes: byAuthor.get(a.id) ?? [],
+      }))
+      .sort((a: any, b: any) => b.notes.length - a.notes.length);
+  }, [data, accounts]);
+
+  const visiblePeople = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    if (!q) return people.slice(0, 20);
+    return people.filter(
+      (p: any) => p.name.toLowerCase().includes(q) || (p.email ?? "").toLowerCase().includes(q),
+    );
+  }, [people, userQuery]);
+
+  function askDelete(type: "team" | "card" | "ban" | "unban", id: string, label: string, detail: string) {
     setConfirmType(type);
     setConfirmId(id);
     setConfirmLabel(label);
@@ -147,19 +198,25 @@ function AdminPage() {
 
   async function doDelete() {
     if (!confirmType || !confirmId) return;
-    setDeletingId(confirmId);
+    const isBanAction = confirmType === "ban" || confirmType === "unban";
+    if (isBanAction) setBanningId(confirmId);
+    else setDeletingId(confirmId);
     setConfirmOpen(false);
     try {
       if (confirmType === "team") {
         await deleteTeam({ data: { team_id: confirmId } });
-      } else {
+      } else if (confirmType === "card") {
         await deleteNote({ data: { note_id: confirmId } });
+      } else {
+        await setUserBan({ data: { user_id: confirmId, banned: confirmType === "ban" } });
+        await queryClient.invalidateQueries({ queryKey: ["admin-accounts"] });
       }
       await queryClient.invalidateQueries({ queryKey: ["admin-data"] });
     } catch (e: any) {
       alert("Lỗi: " + e.message);
     } finally {
       setDeletingId(null);
+      setBanningId(null);
     }
   }
 
@@ -353,6 +410,101 @@ function AdminPage() {
                 );
               })}
             </div>
+            <section className="mt-10">
+              <h2 className="font-display text-lg font-bold">👤 Học viên ({people.length})</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Bấm vào một người để xem toàn bộ card họ đã viết. Khoá chỉ chặn đăng nhập —
+                card đã viết vẫn còn và phải xoá riêng.
+              </p>
+
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
+                <Search className="size-4 shrink-0 text-muted-foreground" />
+                <input
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                  placeholder="Tìm theo tên hoặc email…"
+                  className="w-full bg-transparent text-sm outline-none"
+                />
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {visiblePeople.map((p: any) => {
+                  const isOpen = openUserId === p.id;
+                  return (
+                    <div key={p.id} className="rounded-lg border border-border bg-card">
+                      <div className="flex flex-wrap items-center gap-2 p-3">
+                        <button
+                          onClick={() => setOpenUserId(isOpen ? null : p.id)}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        >
+                          <span className="truncate text-sm font-semibold">{p.name}</span>
+                          {p.banned && (
+                            <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-700">
+                              đã khoá
+                            </span>
+                          )}
+                          <span className="truncate text-xs text-muted-foreground">{p.email}</span>
+                        </button>
+                        <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+                          {p.notes.length} card
+                        </span>
+                        <button
+                          disabled={banningId === p.id}
+                          onClick={() =>
+                            askDelete(
+                              p.banned ? "unban" : "ban",
+                              p.id,
+                              p.banned ? `mở khoá cho ${p.name}` : `khoá tài khoản ${p.name}`,
+                              p.banned
+                                ? "Người này sẽ đăng nhập lại được bình thường."
+                                : `${p.email} sẽ không đăng nhập được nữa. Card đã viết vẫn còn. Đăng ký đang mở nên họ có thể lập tài khoản mới.`,
+                            )
+                          }
+                          className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-white disabled:opacity-50 ${
+                            p.banned ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-500 hover:bg-red-600"
+                          }`}
+                        >
+                          {p.banned ? <Undo2 className="size-3" /> : <Ban className="size-3" />}
+                        </button>
+                      </div>
+
+                      {isOpen && (
+                        <div className="border-t border-border p-3">
+                          {p.notes.length === 0 && (
+                            <p className="text-xs text-muted-foreground">Chưa viết card nào.</p>
+                          )}
+                          {p.notes.map((n: any) => (
+                            <div key={n.id} className="mb-2 rounded-md bg-muted/40 p-2 text-xs">
+                              <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                <span>
+                                  {n.team?.room_id} · #{n.team?.code} · {tpl.columns.find((c) => c.key === normalizeKey(n.column_key))?.title ?? n.column_key}
+                                </span>
+                                <button
+                                  disabled={deletingId === n.id}
+                                  onClick={() => askDelete("card", n.id, "card này", n.content?.slice(0, 120) ?? "")}
+                                  className="shrink-0 rounded bg-red-500 px-1.5 py-0.5 text-white hover:bg-red-600 disabled:opacity-50"
+                                  title="Xoá card"
+                                >
+                                  <Trash2 className="size-3" />
+                                </button>
+                              </div>
+                              <div className="whitespace-pre-wrap break-words text-foreground/90">
+                                <Linkify text={n.content ?? ""} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {!userQuery && people.length > 20 && (
+                  <p className="text-xs text-muted-foreground">
+                    Đang hiện 20 người viết nhiều nhất. Gõ vào ô tìm kiếm để thấy những người còn lại.
+                  </p>
+                )}
+              </div>
+            </section>
           </>
         )}
       </div>
@@ -360,16 +512,27 @@ function AdminPage() {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Xác nhận xoá</AlertDialogTitle>
+            <AlertDialogTitle>
+              {confirmType === "ban" ? "Xác nhận khoá" : confirmType === "unban" ? "Xác nhận mở khoá" : "Xác nhận xoá"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn có chắc muốn xoá {confirmLabel}?
+              {confirmType === "ban" || confirmType === "unban"
+                ? `Bạn có chắc muốn ${confirmLabel}?`
+                : `Bạn có chắc muốn xoá ${confirmLabel}?`}
               {confirmDetail && <span className="mt-1 block text-muted-foreground">{confirmDetail}</span>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setConfirmOpen(false)}>Huỷ</AlertDialogCancel>
-            <AlertDialogAction onClick={doDelete} className="bg-red-500 hover:bg-red-600 text-white">
-              {deletingId ? "Đang xoá…" : "Xoá"}
+            <AlertDialogAction
+              onClick={doDelete}
+              className={
+                confirmType === "unban"
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  : "bg-red-500 hover:bg-red-600 text-white"
+              }
+            >
+              {confirmType === "ban" ? "Khoá" : confirmType === "unban" ? "Mở khoá" : deletingId ? "Đang xoá…" : "Xoá"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
