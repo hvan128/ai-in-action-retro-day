@@ -96,6 +96,51 @@ function roomPoster(room, teams) {
 </svg>`;
 }
 
+/**
+ * Một QR duy nhất dẫn về trang chủ, dùng khi để học viên tự tạo nhóm.
+ * Kèm ba bước vì chiếu lên là cả phòng nhìn thấy, đỡ phải hô đi hô lại.
+ */
+function singlePoster() {
+  const W = 1920, H = 1080;
+  const qrSize = 560;
+  const qrX = 190, qrY = 300;
+  const stepX = 900;
+  const domain = BASE_URL.replace(/^https:\/\//, "");
+
+  // SVG không tự xuống dòng: mô tả ở 33px chỉ vừa khoảng 55 ký tự trước khi
+  // tràn khỏi mép phải. Giữ ngắn hơn mức đó.
+  const steps = [
+    ["1", "Đăng nhập", "Chưa có tài khoản thì bấm “Tạo tài khoản mới”."],
+    ["2", "Chọn phòng của bạn", "Đúng phòng đang ngồi: D303, D304, D305, E402, E403."],
+    ["3", "Tạo nhóm hoặc vào nhóm", "Một bạn bấm tạo, cả bàn chọn đúng tên nhóm đó."],
+  ]
+    .map(([n, title, desc], i) => {
+      const y = 330 + i * 190;
+      return `
+    <text x="${stepX}" y="${y}" font-family="Helvetica, Arial, sans-serif" font-size="64"
+          font-weight="bold" fill="${ACCENT}">${n}</text>
+    <text x="${stepX + 70}" y="${y}" font-family="Helvetica, Arial, sans-serif" font-size="52"
+          font-weight="bold" fill="${INK}">${esc(title)}</text>
+    <text x="${stepX + 70}" y="${y + 52}" font-family="Helvetica, Arial, sans-serif" font-size="33"
+          fill="${MUTED}">${esc(desc)}</text>`;
+    })
+    .join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <rect width="${W}" height="${H}" fill="${GROUND}"/>
+  <text x="${W / 2}" y="120" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
+        font-size="82" font-weight="bold" fill="${INK}">AI IN ACTION DAY 15 — RETRO</text>
+  <text x="${W / 2}" y="180" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
+        font-size="36" fill="${MUTED}">Quét mã để bắt đầu retro của nhóm bạn</text>
+  <rect x="110" y="225" width="${W - 220}" height="2" fill="#E3E2EA"/>
+  <path d="${qrPath(BASE_URL, qrSize)}" fill="${INK}" transform="translate(${qrX} ${qrY})"/>
+  <text x="${qrX + qrSize / 2}" y="${qrY + qrSize + 62}" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="bold"
+        fill="${INK}">${esc(domain)}</text>
+  ${steps}
+</svg>`;
+}
+
 function masterPoster(byRoom) {
   const W = 2600, H = 2000;
   const qrSize = 170;
@@ -130,26 +175,6 @@ function masterPoster(byRoom) {
 }
 
 // ── chạy ────────────────────────────────────────────────────────────────────
-const { data: teams, error } = await sb
-  .from("teams")
-  .select("code, name, room_id")
-  .order("code");
-if (error) {
-  console.error("Không đọc được teams:", error.message);
-  process.exit(1);
-}
-if (!teams?.length) {
-  console.error("Chưa có nhóm nào. Chạy seed-retro-teams.mjs --apply trước.");
-  process.exit(1);
-}
-
-const byRoom = new Map();
-for (const t of teams) {
-  if (!byRoom.has(t.room_id)) byRoom.set(t.room_id, []);
-  byRoom.get(t.room_id).push(t);
-}
-const sortedRooms = [...byRoom.entries()].sort();
-
 mkdirSync(OUT_DIR, { recursive: true });
 
 function render(name, svg) {
@@ -159,6 +184,34 @@ function render(name, svg) {
   execFileSync("rsvg-convert", ["-o", pngPath, svgPath]);
   return pngPath;
 }
+
+// --single: một QR duy nhất về trang chủ, dùng khi học viên tự tạo nhóm.
+if (process.argv.includes("--single")) {
+  console.log(render("qr-chung", singlePoster()));
+  process.exit(0);
+}
+
+const { data: teams, error } = await sb
+  .from("teams")
+  .select("code, name, room_id")
+  .order("code");
+if (error) {
+  console.error("Không đọc được teams:", error.message);
+  process.exit(1);
+}
+if (!teams?.length) {
+  console.error("Chưa có nhóm nào.");
+  console.error("Tạo sẵn nhóm bằng seed-retro-teams.mjs --apply, hoặc dùng --single để");
+  console.error("sinh một QR chung khi muốn học viên tự tạo nhóm.");
+  process.exit(1);
+}
+
+const byRoom = new Map();
+for (const t of teams) {
+  if (!byRoom.has(t.room_id)) byRoom.set(t.room_id, []);
+  byRoom.get(t.room_id).push(t);
+}
+const sortedRooms = [...byRoom.entries()].sort();
 
 const made = [];
 for (const [room, list] of sortedRooms) {

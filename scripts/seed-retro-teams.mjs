@@ -32,7 +32,10 @@ const NOTE_COLORS = ["note-yellow", "note-green", "note-blue", "note-pink", "not
 // ─────────────────────────────────────────────────────────────────────────────
 
 const apply = process.argv.includes("--apply");
-const reset = process.argv.includes("--reset");
+// --clear: chỉ xoá nhóm trong các phòng ở PLAN rồi dừng, không tạo lại. Dùng khi
+// muốn để học viên tự tạo nhóm.
+const clearOnly = process.argv.includes("--clear");
+const reset = clearOnly || process.argv.includes("--reset");
 const force = process.argv.includes("--force");
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -95,6 +98,16 @@ if (clash.length > 0 && reset) {
     console.log("  (chạy khô — chưa xoá thật)");
   }
   clash.length = 0;
+
+  if (clearOnly) {
+    console.log(apply ? "Đã xoá xong. Học viên sẽ tự tạo nhóm." : "(chạy khô — thêm --apply để xoá thật)");
+    process.exit(0);
+  }
+}
+
+if (clearOnly) {
+  console.log("Các phòng trong PLAN không có nhóm nào để xoá.");
+  process.exit(0);
 }
 
 if (clash.length > 0) {
