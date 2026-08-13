@@ -14,6 +14,9 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const BASE_URL = process.env.RETRO_BASE_URL || "https://ai-in-action-retro-day.van-nh120802.workers.dev";
+// Link rút gọn chỉ để in cho người gõ tay. QR vẫn mã hoá URL thật: quét là đi
+// thẳng, không phụ thuộc dịch vụ rút gọn còn sống hay có bị mạng trường chặn không.
+const SHORT_URL = process.env.RETRO_SHORT_URL || "tinyurl.com/retroday15";
 const OUT_DIR = process.env.RETRO_OUT_DIR || "qr-posters";
 
 const INK = "#141319";
@@ -134,9 +137,14 @@ function singlePoster() {
         font-size="36" fill="${MUTED}">Quét mã để bắt đầu retro của nhóm bạn</text>
   <rect x="110" y="225" width="${W - 220}" height="2" fill="#E3E2EA"/>
   <path d="${qrPath(BASE_URL, qrSize)}" fill="${INK}" transform="translate(${qrX} ${qrY})"/>
-  <text x="${qrX + qrSize / 2}" y="${qrY + qrSize + 62}" text-anchor="middle"
-        font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="bold"
-        fill="${INK}">${esc(domain)}</text>
+  <text x="${qrX + qrSize / 2}" y="${qrY + qrSize + 52}" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif" font-size="30" fill="${MUTED}">Không quét được thì gõ</text>
+  <text x="${qrX + qrSize / 2}" y="${qrY + qrSize + 108}" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif" font-size="46" font-weight="bold"
+        fill="${ACCENT}">${esc(SHORT_URL)}</text>
+  <text x="${qrX + qrSize / 2}" y="${qrY + qrSize + 150}" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif" font-size="23"
+        fill="${MUTED}">hoặc ${esc(domain)}</text>
   ${steps}
 </svg>`;
 }
