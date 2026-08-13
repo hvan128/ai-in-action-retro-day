@@ -117,7 +117,7 @@ export const adminListConfessions = createServerFn({ method: "GET" })
 
     const { data: rows, error } = await supabaseAdmin
       .from("confessions")
-      .select("id, content, status, number, created_at, reviewed_at, author_id, pinned")
+      .select("id, content, status, number, created_at, reviewed_at, author_id, pinned, image_path")
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error(error.message);
@@ -139,6 +139,7 @@ export const adminListConfessions = createServerFn({ method: "GET" })
       author_name: nameOf.get(r.author_id) ?? "?",
       author_id: r.author_id,
       pinned: r.pinned,
+      image_path: r.image_path,
     }));
   });
 
@@ -170,8 +171,12 @@ export const adminReviewConfession = createServerFn({ method: "POST" })
       .from("confessions")
       .update({
         status: data.approve ? "approved" : "rejected",
+        // Số thứ tự bị thu hồi khi gỡ; duyệt lại sẽ cấp số mới ở cuối dãy.
         number,
         reviewed_at: new Date().toISOString(),
+        // Gỡ một bài đang ghim thì phải bỏ ghim theo, không thì lúc duyệt lại
+        // nó lặng lẽ nhảy về đầu trang.
+        ...(data.approve ? {} : { pinned: false }),
       })
       .eq("id", data.id);
     if (error) throw new Error(error.message);

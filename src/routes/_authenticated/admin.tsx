@@ -16,6 +16,7 @@ import {
 import { TEMPLATES, type TemplateKey } from "@/lib/utils";
 import { Download, Trash2, Ban, Search, Undo2, Check, X, Pin, PinOff } from "lucide-react";
 import { Linkify } from "@/lib/linkify";
+import { supabase } from "@/integrations/supabase/client";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +32,9 @@ export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({ meta: [{ title: "Admin — Toàn bộ dữ liệu retro" }] }),
   component: AdminPage,
 });
+
+const confessionImageUrl = (path: string) =>
+  supabase.storage.from("confession-images").getPublicUrl(path).data.publicUrl;
 
 function csvEscape(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -488,6 +492,21 @@ function AdminPage() {
                     <div className="whitespace-pre-wrap break-words text-sm text-foreground">
                       <Linkify text={c.content} />
                     </div>
+                    {c.image_path && (
+                      <a
+                        href={confessionImageUrl(c.image_path)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 block"
+                        title="Mở ảnh cỡ đầy đủ"
+                      >
+                        <img
+                          src={confessionImageUrl(c.image_path)}
+                          alt=""
+                          className="max-h-64 rounded-lg border border-amber-200 object-contain"
+                        />
+                      </a>
+                    )}
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-2">
                       <span className="text-[11px] font-semibold text-muted-foreground">
                         {c.author_name} · {new Date(c.created_at).toLocaleString("vi-VN")}
@@ -536,18 +555,37 @@ function AdminPage() {
                             {c.content.slice(0, 160)}
                           </span>
                           <span className="shrink-0 text-muted-foreground">{c.author_name}</span>
-                          {c.status === "approved" && (
+                          {c.status === "approved" ? (
+                            <>
+                              <button
+                                disabled={reviewingId === c.id}
+                                onClick={() => doPin(c.id, !c.pinned)}
+                                title={c.pinned ? "Bỏ ghim" : "Ghim lên đầu trang confession"}
+                                className={`shrink-0 rounded px-1.5 py-0.5 disabled:opacity-50 ${
+                                  c.pinned
+                                    ? "bg-brand text-white"
+                                    : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
+                                }`}
+                              >
+                                {c.pinned ? <PinOff className="size-3" /> : <Pin className="size-3" />}
+                              </button>
+                              <button
+                                disabled={reviewingId === c.id}
+                                onClick={() => doReview(c.id, false)}
+                                title="Gỡ khỏi trang confession — học viên sẽ không thấy nữa"
+                                className="shrink-0 whitespace-nowrap rounded bg-red-500 px-1.5 py-0.5 font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+                              >
+                                Gỡ xuống
+                              </button>
+                            </>
+                          ) : (
                             <button
                               disabled={reviewingId === c.id}
-                              onClick={() => doPin(c.id, !c.pinned)}
-                              title={c.pinned ? "Bỏ ghim" : "Ghim lên đầu trang confession"}
-                              className={`shrink-0 rounded px-1.5 py-0.5 disabled:opacity-50 ${
-                                c.pinned
-                                  ? "bg-brand text-white"
-                                  : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
-                              }`}
+                              onClick={() => doReview(c.id, true)}
+                              title="Duyệt lại — bài sẽ hiện lên với số mới"
+                              className="shrink-0 whitespace-nowrap rounded bg-emerald-600 px-1.5 py-0.5 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                             >
-                              {c.pinned ? <PinOff className="size-3" /> : <Pin className="size-3" />}
+                              Duyệt lại
                             </button>
                           )}
                         </div>

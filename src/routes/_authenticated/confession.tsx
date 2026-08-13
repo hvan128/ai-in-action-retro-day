@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Send, Clock, MessageCircle, Trash2, Pin } from "lucide-react";
+import { Send, Clock, MessageCircle, Trash2, Pin, ImagePlus, X } from "lucide-react";
 import { Linkify } from "@/lib/linkify";
 
 export const Route = createFileRoute("/_authenticated/confession")({
@@ -14,6 +14,7 @@ export const Route = createFileRoute("/_authenticated/confession")({
 
 const MAX = 2000;
 const MAX_COMMENT = 500;
+const MAX_IMAGE = 5 * 1024 * 1024;
 const EMOJIS = ["❤️", "😂", "😮", "😢", "👏"] as const;
 
 function ConfessionPage() {
@@ -23,6 +24,11 @@ function ConfessionPage() {
   const [sending, setSending] = useState(false);
   const [openComments, setOpenComments] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"reacts" | "new">("reacts");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const imageUrl = (path: string) =>
+    supabase.storage.from("confession-images").getPublicUrl(path).data.publicUrl;
 
   // Bảng confessions không nằm trong publication realtime (xem migration), nên
   // bài mới duyệt về bằng cách hỏi lại định kỳ. Cảm xúc và bình luận thì có
@@ -33,7 +39,7 @@ function ConfessionPage() {
       // Quyền cột không cho đọc author_id và status — select("*") sẽ lỗi 403.
       const { data, error } = await supabase
         .from("confessions")
-        .select("id, content, number, created_at, pinned")
+        .select("id, content, number, created_at, pinned, image_path")
         .order("number", { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -128,15 +134,51 @@ function ConfessionPage() {
     return m;
   }, [comments]);
 
+  function pickImage(f: File | null) {
+    if (!f) return;
+    if (!f.type.startsWith("image/")) {
+      toast.error("Chỉ nhận file ảnh");
+      return;
+    }
+    if (f.size > MAX_IMAGE) {
+      toast.error("Ảnh nặng quá, tối đa 5MB");
+      return;
+    }
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+  }
+
+  function clearImage() {
+    if (preview) URL.revokeObjectURL(preview);
+    setFile(null);
+    setPreview(null);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const content = text.trim();
-    if (!content) return;
+    if (!content && !file) return;
     setSending(true);
     try {
-      const { error } = await supabase.from("confessions").insert({ content, author_id: user.id });
+      let imagePath: string | null = null;
+      if (file) {
+        // Tên file ngẫu nhiên: ảnh của bài chưa duyệt nằm trong bucket công khai,
+        // đoán được đường dẫn là xem được trước khi admin kịp duyệt.
+        const ext = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const path = `${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("confession-images")
+          .upload(path, file, { contentType: file.type, upsert: false });
+        if (upErr) throw upErr;
+        imagePath = path;
+      }
+
+      const { error } = await supabase
+        .from("confessions")
+        .insert({ content: content || "(ảnh)", author_id: user.id, image_path: imagePath });
       if (error) throw error;
       setText("");
+      clearImage();
       toast.success("Đã gửi! Bài sẽ hiện lên sau khi được duyệt.");
     } catch (err: any) {
       toast.error(err.message ?? "Không gửi được, thử lại nhé");
@@ -181,11 +223,37 @@ function ConfessionPage() {
             placeholder="Điều bạn muốn nói mà chưa tiện nói trực tiếp…"
             className="w-full resize-y bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
+          {preview && (
+            <div className="relative mt-2 inline-block">
+              <img src={preview} alt="Ảnh sắp gửi" className="max-h-56 rounded-lg border border-border" />
+              <button
+                type="button"
+                onClick={clearImage}
+                className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
+                title="Bỏ ảnh"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          )}
+
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
-            <span className="text-xs text-muted-foreground">{text.length}/{MAX}</span>
+            <div className="flex items-center gap-3">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-brand">
+                <ImagePlus className="size-4" />
+                Thêm ảnh
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => pickImage(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              <span className="text-xs text-muted-foreground">{text.length}/{MAX}</span>
+            </div>
             <button
               type="submit"
-              disabled={sending || !text.trim()}
+              disabled={sending || (!text.trim() && !file)}
               className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/20 hover:opacity-90 disabled:opacity-50"
             >
               <Send className="size-4" />
@@ -248,6 +316,17 @@ function ConfessionPage() {
                 <div className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground/90">
                   <Linkify text={p.content} />
                 </div>
+
+                {p.image_path && (
+                  <a href={imageUrl(p.image_path)} target="_blank" rel="noreferrer" className="mt-2 block">
+                    <img
+                      src={imageUrl(p.image_path)}
+                      alt=""
+                      loading="lazy"
+                      className="max-h-96 w-full rounded-lg border border-border object-contain"
+                    />
+                  </a>
+                )}
 
                 <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
                   {EMOJIS.map((e) => {

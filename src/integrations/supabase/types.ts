@@ -138,6 +138,7 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          image_path: string | null
           number: number | null
           pinned: boolean
           reviewed_at: string | null
@@ -148,6 +149,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          image_path?: string | null
           number?: number | null
           pinned?: boolean
           reviewed_at?: string | null
@@ -158,6 +160,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          image_path?: string | null
           number?: number | null
           pinned?: boolean
           reviewed_at?: string | null
