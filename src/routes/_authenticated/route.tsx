@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, Link, useNavigate, useRouterState } 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ChevronDown, ChevronsLeft, ChevronsRight, Users, LayoutGrid, Check, Shield } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, Users, LayoutGrid, Check, Shield, MessageCircleHeart } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -216,6 +216,14 @@ function AuthedLayout() {
                 </div>
               )}
               <div className="space-y-1">
+                <Link
+                  to="/confession"
+                  className={`flex items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-muted ${pathname === "/confession" ? "bg-brand/10 text-brand" : ""}`}
+                  title="Confession ẩn danh"
+                >
+                  <MessageCircleHeart className="size-4 shrink-0" />
+                  {!collapsed && <span className="font-semibold">Confession</span>}
+                </Link>
                 {selectedRoomId && (
                   <Link
                     to="/rooms/$roomId"

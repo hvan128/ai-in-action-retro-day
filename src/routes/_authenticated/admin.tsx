@@ -9,9 +9,11 @@ import {
   adminDeleteNote,
   adminListAccounts,
   adminSetUserBan,
+  adminListConfessions,
+  adminReviewConfession,
 } from "@/lib/admin-data.functions";
 import { TEMPLATES, type TemplateKey } from "@/lib/utils";
-import { Download, Trash2, Ban, Search, Undo2 } from "lucide-react";
+import { Download, Trash2, Ban, Search, Undo2, Check, X } from "lucide-react";
 import { Linkify } from "@/lib/linkify";
 import {
   AlertDialog,
@@ -90,6 +92,33 @@ function AdminPage() {
     queryFn: () => listAccounts(),
     enabled: user.email === "admin@gmail.com",
   });
+
+  const listConfessions = useServerFn(adminListConfessions);
+  const reviewConfession = useServerFn(adminReviewConfession);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const { data: confessions } = useQuery({
+    queryKey: ["admin-confessions"],
+    queryFn: () => listConfessions(),
+    enabled: user.email === "admin@gmail.com",
+    // Học viên gửi bài liên tục trong buổi, tự làm mới để không phải F5 tay.
+    refetchInterval: 20000,
+  });
+  const pendingConfessions = useMemo(
+    () => (confessions ?? []).filter((c: any) => c.status === "pending"),
+    [confessions],
+  );
+
+  async function doReview(id: string, approve: boolean) {
+    setReviewingId(id);
+    try {
+      await reviewConfession({ data: { id, approve } });
+      await queryClient.invalidateQueries({ queryKey: ["admin-confessions"] });
+    } catch (e: any) {
+      alert("Lỗi: " + e.message);
+    } finally {
+      setReviewingId(null);
+    }
+  }
 
   const tpl = TEMPLATES["sprint_retrospective" as TemplateKey] ?? Object.values(TEMPLATES)[0];
 
@@ -425,6 +454,81 @@ function AdminPage() {
                 );
               })}
             </div>
+            <section className="mt-10">
+              <h2 className="font-display text-lg font-bold">
+                💌 Confession chờ duyệt ({pendingConfessions.length})
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Bài chỉ hiện với học viên sau khi được duyệt, và được đánh số theo thứ tự duyệt.
+                Tên người gửi chỉ hiện ở đây, học viên khác không đọc được.
+              </p>
+
+              <div className="mt-3 space-y-2">
+                {pendingConfessions.length === 0 && (
+                  <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                    Không có bài nào đang chờ.
+                  </p>
+                )}
+                {pendingConfessions.map((c: any) => (
+                  <div key={c.id} className="rounded-lg border border-amber-300 bg-amber-50/60 p-3">
+                    <div className="whitespace-pre-wrap break-words text-sm text-foreground">
+                      <Linkify text={c.content} />
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-2">
+                      <span className="text-[11px] font-semibold text-muted-foreground">
+                        {c.author_name} · {new Date(c.created_at).toLocaleString("vi-VN")}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          disabled={reviewingId === c.id}
+                          onClick={() => doReview(c.id, false)}
+                          className="inline-flex items-center gap-1 rounded-md bg-red-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+                        >
+                          <X className="size-3" /> Từ chối
+                        </button>
+                        <button
+                          disabled={reviewingId === c.id}
+                          onClick={() => doReview(c.id, true)}
+                          className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          <Check className="size-3" /> Duyệt
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {(confessions?.length ?? 0) > pendingConfessions.length && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                    Đã xử lý ({(confessions?.length ?? 0) - pendingConfessions.length})
+                  </summary>
+                  <div className="mt-2 space-y-1">
+                    {(confessions ?? [])
+                      .filter((c: any) => c.status !== "pending")
+                      .map((c: any) => (
+                        <div key={c.id} className="flex items-start gap-2 rounded-md bg-muted/40 p-2 text-xs">
+                          <span
+                            className={`shrink-0 rounded px-1.5 py-0.5 font-bold ${
+                              c.status === "approved"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {c.status === "approved" ? `#${c.number}` : "từ chối"}
+                          </span>
+                          <span className="min-w-0 flex-1 break-words text-foreground/80">
+                            {c.content.slice(0, 160)}
+                          </span>
+                          <span className="shrink-0 text-muted-foreground">{c.author_name}</span>
+                        </div>
+                      ))}
+                  </div>
+                </details>
+              )}
+            </section>
+
             <section className="mt-10">
               <h2 className="font-display text-lg font-bold">👤 Học viên ({people.length})</h2>
               <p className="mt-1 text-xs text-muted-foreground">

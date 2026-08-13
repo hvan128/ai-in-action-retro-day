@@ -106,6 +106,77 @@ export const adminSetUserBan = createServerFn({ method: "POST" })
     return { ok: true, banned: data.banned };
   });
 
+export const adminListConfessions = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const email = (context.claims as any)?.email;
+    if (email !== ADMIN_EMAIL) {
+      throw new Error("Forbidden");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: rows, error } = await supabaseAdmin
+      .from("confessions")
+      .select("id, content, status, number, created_at, reviewed_at, author_id")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw new Error(error.message);
+
+    // Ẩn danh là ẩn với học viên khác. Admin cần thấy tên để xử lý được khi có
+    // người lợi dụng — đúng lý do bảng vẫn lưu author_id.
+    const ids = [...new Set((rows ?? []).map((r) => r.author_id))];
+    const { data: profiles } = ids.length
+      ? await supabaseAdmin.from("profiles").select("id, display_name").in("id", ids)
+      : { data: [] };
+    const nameOf = new Map((profiles ?? []).map((p: any) => [p.id, p.display_name]));
+
+    return (rows ?? []).map((r) => ({
+      id: r.id,
+      content: r.content,
+      status: r.status,
+      number: r.number,
+      created_at: r.created_at,
+      author_name: nameOf.get(r.author_id) ?? "?",
+      author_id: r.author_id,
+    }));
+  });
+
+export const adminReviewConfession = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string; approve: boolean }) => input)
+  .handler(async ({ data, context }) => {
+    const email = (context.claims as any)?.email;
+    if (email !== ADMIN_EMAIL) {
+      throw new Error("Forbidden");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    let number: number | null = null;
+    if (data.approve) {
+      // Số thứ tự chỉ gán khi duyệt, và không tái sử dụng số của bài bị từ chối
+      // để thứ tự hiển thị luôn tăng đều.
+      const { data: top } = await supabaseAdmin
+        .from("confessions")
+        .select("number")
+        .not("number", "is", null)
+        .order("number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      number = ((top?.number as number | null) ?? 0) + 1;
+    }
+
+    const { error } = await supabaseAdmin
+      .from("confessions")
+      .update({
+        status: data.approve ? "approved" : "rejected",
+        number,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true, number };
+  });
+
 export const adminCreateUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { email: string; password: string; display_name?: string }) => input)

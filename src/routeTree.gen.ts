@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as JCodeRouteImport } from './routes/j.$code'
+import { Route as AuthenticatedConfessionRouteImport } from './routes/_authenticated/confession'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedRoomsIndexRouteImport } from './routes/_authenticated/rooms.index'
 import { Route as AuthenticatedRoomsRoomIdRouteImport } from './routes/_authenticated/rooms.$roomId'
@@ -37,6 +38,11 @@ const JCodeRoute = JCodeRouteImport.update({
   id: '/j/$code',
   path: '/j/$code',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedConfessionRoute = AuthenticatedConfessionRouteImport.update({
+  id: '/confession',
+  path: '/confession',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/admin',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/confession': typeof AuthenticatedConfessionRoute
   '/j/$code': typeof JCodeRoute
   '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteWithChildren
   '/rooms/': typeof AuthenticatedRoomsIndexRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/confession': typeof AuthenticatedConfessionRoute
   '/j/$code': typeof JCodeRoute
   '/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteWithChildren
   '/rooms': typeof AuthenticatedRoomsIndexRoute
@@ -93,6 +101,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/_authenticated/confession': typeof AuthenticatedConfessionRoute
   '/j/$code': typeof JCodeRoute
   '/_authenticated/rooms/$roomId': typeof AuthenticatedRoomsRoomIdRouteWithChildren
   '/_authenticated/rooms/': typeof AuthenticatedRoomsIndexRoute
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/admin'
+    | '/confession'
     | '/j/$code'
     | '/rooms/$roomId'
     | '/rooms/'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/admin'
+    | '/confession'
     | '/j/$code'
     | '/rooms/$roomId'
     | '/rooms'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/admin'
+    | '/_authenticated/confession'
     | '/j/$code'
     | '/_authenticated/rooms/$roomId'
     | '/_authenticated/rooms/'
@@ -169,6 +181,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/j/$code'
       preLoaderRoute: typeof JCodeRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/confession': {
+      id: '/_authenticated/confession'
+      path: '/confession'
+      fullPath: '/confession'
+      preLoaderRoute: typeof AuthenticatedConfessionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin': {
       id: '/_authenticated/admin'
@@ -225,6 +244,7 @@ const AuthenticatedRoomsRoomIdRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
+  AuthenticatedConfessionRoute: typeof AuthenticatedConfessionRoute
   AuthenticatedRoomsRoomIdRoute: typeof AuthenticatedRoomsRoomIdRouteWithChildren
   AuthenticatedRoomsIndexRoute: typeof AuthenticatedRoomsIndexRoute
   AuthenticatedBoardRoomIdTeamIdRoute: typeof AuthenticatedBoardRoomIdTeamIdRoute
@@ -232,6 +252,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
+  AuthenticatedConfessionRoute: AuthenticatedConfessionRoute,
   AuthenticatedRoomsRoomIdRoute: AuthenticatedRoomsRoomIdRouteWithChildren,
   AuthenticatedRoomsIndexRoute: AuthenticatedRoomsIndexRoute,
   AuthenticatedBoardRoomIdTeamIdRoute: AuthenticatedBoardRoomIdTeamIdRoute,
