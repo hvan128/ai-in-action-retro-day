@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Send, Clock, MessageCircle, Trash2 } from "lucide-react";
+import { Send, Clock, MessageCircle, Trash2, Pin } from "lucide-react";
 import { Linkify } from "@/lib/linkify";
 
 export const Route = createFileRoute("/_authenticated/confession")({
@@ -33,7 +33,7 @@ function ConfessionPage() {
       // Quyền cột không cho đọc author_id và status — select("*") sẽ lỗi 403.
       const { data, error } = await supabase
         .from("confessions")
-        .select("id, content, number, created_at")
+        .select("id, content, number, created_at, pinned")
         .order("number", { ascending: false });
       if (error) throw error;
       return data ?? [];
@@ -107,11 +107,15 @@ function ConfessionPage() {
 
   const sortedPosts = useMemo(() => {
     const list = [...(posts ?? [])];
-    if (sortBy === "new") return list.sort((a: any, b: any) => (b.number ?? 0) - (a.number ?? 0));
-    // Bằng điểm thì bài mới lên trước, để bài vừa duyệt không nằm mãi dưới đáy.
     return list.sort((a: any, b: any) => {
-      const d = (byPost.get(b.id)?.total ?? 0) - (byPost.get(a.id)?.total ?? 0);
-      return d !== 0 ? d : (b.number ?? 0) - (a.number ?? 0);
+      // Bài admin ghim luôn nằm trên, bất kể đang xếp theo kiểu nào.
+      if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+      if (sortBy === "reacts") {
+        const d = (byPost.get(b.id)?.total ?? 0) - (byPost.get(a.id)?.total ?? 0);
+        if (d !== 0) return d;
+      }
+      // Bằng điểm thì bài mới lên trước, để bài vừa duyệt không nằm mãi dưới đáy.
+      return (b.number ?? 0) - (a.number ?? 0);
     });
   }, [posts, byPost, sortBy]);
 
@@ -226,7 +230,20 @@ function ConfessionPage() {
             const cs = commentsByPost.get(p.id) ?? [];
             const isOpen = openComments === p.id;
             return (
-              <article key={p.id} className="rounded-xl border border-border bg-card p-4">
+              <article
+                key={p.id}
+                className={
+                  p.pinned
+                    ? "rounded-xl border-2 border-brand bg-brand/[0.06] p-4 shadow-lg shadow-brand/10"
+                    : "rounded-xl border border-border bg-card p-4"
+                }
+              >
+                {p.pinned && (
+                  <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-brand px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+                    <Pin className="size-3" />
+                    Ghim
+                  </div>
+                )}
                 <div className="font-display text-sm font-bold text-brand">#{p.number}</div>
                 <div className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground/90">
                   <Linkify text={p.content} />

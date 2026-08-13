@@ -139,6 +139,7 @@ export type Database = {
           created_at: string
           id: string
           number: number | null
+          pinned: boolean
           reviewed_at: string | null
           status: string
         }
@@ -148,6 +149,7 @@ export type Database = {
           created_at?: string
           id?: string
           number?: number | null
+          pinned?: boolean
           reviewed_at?: string | null
           status?: string
         }
@@ -157,6 +159,7 @@ export type Database = {
           created_at?: string
           id?: string
           number?: number | null
+          pinned?: boolean
           reviewed_at?: string | null
           status?: string
         }
@@ -361,6 +364,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      is_confession_approved: { Args: { _id: string }; Returns: boolean }
       is_team_member: {
         Args: { _team_id: string; _user_id: string }
         Returns: boolean

@@ -11,9 +11,10 @@ import {
   adminSetUserBan,
   adminListConfessions,
   adminReviewConfession,
+  adminSetConfessionPin,
 } from "@/lib/admin-data.functions";
 import { TEMPLATES, type TemplateKey } from "@/lib/utils";
-import { Download, Trash2, Ban, Search, Undo2, Check, X } from "lucide-react";
+import { Download, Trash2, Ban, Search, Undo2, Check, X, Pin, PinOff } from "lucide-react";
 import { Linkify } from "@/lib/linkify";
 import {
   AlertDialog,
@@ -95,6 +96,7 @@ function AdminPage() {
 
   const listConfessions = useServerFn(adminListConfessions);
   const reviewConfession = useServerFn(adminReviewConfession);
+  const setConfessionPin = useServerFn(adminSetConfessionPin);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const { data: confessions } = useQuery({
     queryKey: ["admin-confessions"],
@@ -107,6 +109,18 @@ function AdminPage() {
     () => (confessions ?? []).filter((c: any) => c.status === "pending"),
     [confessions],
   );
+
+  async function doPin(id: string, pinned: boolean) {
+    setReviewingId(id);
+    try {
+      await setConfessionPin({ data: { id, pinned } });
+      await queryClient.invalidateQueries({ queryKey: ["admin-confessions"] });
+    } catch (e: any) {
+      alert("Lỗi: " + e.message);
+    } finally {
+      setReviewingId(null);
+    }
+  }
 
   async function doReview(id: string, approve: boolean) {
     setReviewingId(id);
@@ -522,6 +536,20 @@ function AdminPage() {
                             {c.content.slice(0, 160)}
                           </span>
                           <span className="shrink-0 text-muted-foreground">{c.author_name}</span>
+                          {c.status === "approved" && (
+                            <button
+                              disabled={reviewingId === c.id}
+                              onClick={() => doPin(c.id, !c.pinned)}
+                              title={c.pinned ? "Bỏ ghim" : "Ghim lên đầu trang confession"}
+                              className={`shrink-0 rounded px-1.5 py-0.5 disabled:opacity-50 ${
+                                c.pinned
+                                  ? "bg-brand text-white"
+                                  : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
+                              }`}
+                            >
+                              {c.pinned ? <PinOff className="size-3" /> : <Pin className="size-3" />}
+                            </button>
+                          )}
                         </div>
                       ))}
                   </div>

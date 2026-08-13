@@ -117,7 +117,7 @@ export const adminListConfessions = createServerFn({ method: "GET" })
 
     const { data: rows, error } = await supabaseAdmin
       .from("confessions")
-      .select("id, content, status, number, created_at, reviewed_at, author_id")
+      .select("id, content, status, number, created_at, reviewed_at, author_id, pinned")
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error(error.message);
@@ -138,6 +138,7 @@ export const adminListConfessions = createServerFn({ method: "GET" })
       created_at: r.created_at,
       author_name: nameOf.get(r.author_id) ?? "?",
       author_id: r.author_id,
+      pinned: r.pinned,
     }));
   });
 
@@ -175,6 +176,23 @@ export const adminReviewConfession = createServerFn({ method: "POST" })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true, number };
+  });
+
+export const adminSetConfessionPin = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string; pinned: boolean }) => input)
+  .handler(async ({ data, context }) => {
+    const email = (context.claims as any)?.email;
+    if (email !== ADMIN_EMAIL) {
+      throw new Error("Forbidden");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("confessions")
+      .update({ pinned: data.pinned })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true, pinned: data.pinned };
   });
 
 export const adminCreateUser = createServerFn({ method: "POST" })
