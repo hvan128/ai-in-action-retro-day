@@ -180,13 +180,28 @@ function AdminPage() {
       .sort((a: any, b: any) => b.notes.length - a.notes.length);
   }, [data, accounts]);
 
+  // Một ô tìm cho cả tên, email và nội dung card. Kết quả vẫn gom theo người
+  // chứ không đổ ra danh sách card phẳng: khi soi vi phạm, thứ cần thấy là ai
+  // viết bao nhiêu tờ khớp, không phải từng tờ rời rạc.
   const visiblePeople = useMemo(() => {
     const q = userQuery.trim().toLowerCase();
-    if (!q) return people;
-    return people.filter(
-      (p: any) => p.name.toLowerCase().includes(q) || (p.email ?? "").toLowerCase().includes(q),
-    );
+    if (!q) return people.map((p: any) => ({ ...p, matched: null }));
+    return people
+      .map((p: any) => {
+        const matched = p.notes.filter((n: any) => (n.content ?? "").toLowerCase().includes(q));
+        const hitsPerson =
+          p.name.toLowerCase().includes(q) || (p.email ?? "").toLowerCase().includes(q);
+        if (!hitsPerson && matched.length === 0) return null;
+        return { ...p, matched: matched.length ? matched : null };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => (b.matched?.length ?? 0) - (a.matched?.length ?? 0));
   }, [people, userQuery]);
+
+  const totalMatchedNotes = useMemo(
+    () => visiblePeople.reduce((s: number, p: any) => s + (p.matched?.length ?? 0), 0),
+    [visiblePeople],
+  );
 
   function askDelete(type: "team" | "card" | "ban" | "unban", id: string, label: string, detail: string) {
     setConfirmType(type);
@@ -413,8 +428,9 @@ function AdminPage() {
             <section className="mt-10">
               <h2 className="font-display text-lg font-bold">👤 Học viên ({people.length})</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Bấm vào một người để xem toàn bộ card họ đã viết. Khoá chỉ chặn đăng nhập —
-                card đã viết vẫn còn và phải xoá riêng.
+                Tìm được cả theo nội dung card — gõ một cụm từ để xem ai đã viết nó và viết
+                bao nhiêu lần. Bấm vào tên để xem toàn bộ card của người đó. Khoá chỉ chặn
+                đăng nhập, card đã viết vẫn còn và phải xoá riêng.
               </p>
 
               <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
@@ -422,12 +438,13 @@ function AdminPage() {
                 <input
                   value={userQuery}
                   onChange={(e) => setUserQuery(e.target.value)}
-                  placeholder="Tìm theo tên hoặc email…"
+                  placeholder="Tìm theo tên, email hoặc nội dung card…"
                   className="w-full bg-transparent text-sm outline-none"
                 />
                 {userQuery && (
-                  <span className="shrink-0 text-xs font-semibold text-muted-foreground">
-                    {visiblePeople.length}
+                  <span className="shrink-0 whitespace-nowrap text-xs font-semibold text-muted-foreground">
+                    {visiblePeople.length} người
+                    {totalMatchedNotes > 0 && ` · ${totalMatchedNotes} card`}
                   </span>
                 )}
               </div>
@@ -450,9 +467,15 @@ function AdminPage() {
                           )}
                           <span className="truncate text-xs text-muted-foreground">{p.email}</span>
                         </button>
-                        <span className="shrink-0 text-xs font-semibold text-muted-foreground">
-                          {p.notes.length} card
-                        </span>
+                        {p.matched ? (
+                          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
+                            {p.matched.length}/{p.notes.length} card khớp
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+                            {p.notes.length} card
+                          </span>
+                        )}
                         <button
                           disabled={banningId === p.id}
                           onClick={() =>
@@ -473,12 +496,17 @@ function AdminPage() {
                         </button>
                       </div>
 
-                      {isOpen && (
+                      {(isOpen || p.matched) && (
                         <div className="border-t border-border p-3">
                           {p.notes.length === 0 && (
                             <p className="text-xs text-muted-foreground">Chưa viết card nào.</p>
                           )}
-                          {p.notes.map((n: any) => (
+                          {!isOpen && p.matched && (
+                            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                              Chỉ hiện card khớp — bấm tên để xem cả {p.notes.length} card
+                            </p>
+                          )}
+                          {(isOpen ? p.notes : p.matched).map((n: any) => (
                             <div key={n.id} className="mb-2 rounded-md bg-muted/40 p-2 text-xs">
                               <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                 <span>
